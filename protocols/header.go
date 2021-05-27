@@ -10,7 +10,7 @@ package protocols
 import (
 	"fmt"
 
-	"github.com/fengyily/yoyoecs/utils"
+	"github.com/imfoos/yoyoecs/utils"
 )
 
 /**

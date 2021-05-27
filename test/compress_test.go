@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fengyily/yoyoecs/protoc"
-	"github.com/fengyily/yoyoecs/utils"
+	"github.com/imfoos/yoyoecs/protoc"
+	"github.com/imfoos/yoyoecs/utils"
 	"google.golang.org/protobuf/proto"
 )
 

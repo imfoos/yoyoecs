@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fengyily/yoyoecs/protocols"
-	"github.com/fengyily/yoyoecs/utils"
+	"github.com/imfoos/yoyoecs/protocols"
+	"github.com/imfoos/yoyoecs/utils"
 )
 
 /**
