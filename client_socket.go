@@ -22,7 +22,9 @@ package yoyoecs
 
 import (
 	"fmt"
+	"golang.org/x/net/proxy"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -61,6 +63,7 @@ type ClientSocket struct {
 	OnlineTime   time.Time
 	ReConnLock   sync.Mutex
 	sendLock     sync.Mutex
+	Proxy        string
 }
 
 /**
@@ -111,9 +114,15 @@ func (cs *ClientSocket) Conn(ipAddress string) (err error) {
 	cs.IsConnected = false
 	cs.isReConnect = true
 	for {
+
 		cs.ipAddress = ipAddress
-		cn, err := net.Dial("tcp", ipAddress)
-		cs.conn = &cn
+		conn, err := cs.getConn()
+		if err != nil {
+			fmt.Printf("getConn error: %v", err)
+			return
+		}
+		//cn, err := net.Dial("tcp", ipAddress)
+		cs.conn = &conn
 		if err != nil {
 			if cs.OnConnError != nil {
 				cs.OnConnError(err)
@@ -133,6 +142,24 @@ func (cs *ClientSocket) Conn(ipAddress string) (err error) {
 
 	go cs.read()
 
+	return
+}
+
+func (cs *ClientSocket) getConn() (conn net.Conn, err error) {
+	if cs.Proxy != "" {
+		dialer, err := proxy.SOCKS5("tcp", cs.Proxy, nil, proxy.Direct)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "remote connection error:", err)
+			return
+		}
+		conn, err = dialer.Dial("tcp", cs.ipAddress)
+	} else {
+		conn, err = net.Dial("tcp", cs.ipAddress)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "remote connection error:", err)
+		return
+	}
 	return
 }
 
@@ -158,8 +185,13 @@ func (cs *ClientSocket) checkConn() (err error) {
 	cs.Buffer = cs.Buffer[len(cs.Buffer):]
 	for {
 		cs.conn = nil
-		cn, err := net.Dial("tcp", cs.ipAddress)
-		cs.conn = &cn
+		conn, err := cs.getConn()
+		if err != nil {
+			fmt.Printf("getConn error: %v", err)
+			return
+		}
+
+		cs.conn = &conn
 		if err != nil {
 			if cs.OnConnError != nil {
 				cs.OnConnError(err)

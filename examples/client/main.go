@@ -27,6 +27,7 @@ var sendLock sync.Mutex
 func main() {
 	//TestCompress()
 	client := yoyoecs.ClientSocket{}
+	client.Proxy = "192.168.3.90:7777"
 	client.OnConnError = func(err error) {
 		fmt.Println("on connect error ", err)
 	}
@@ -106,7 +107,7 @@ func main() {
 		client.SendMessage(protocols.REQUEST_TRANS_YOYOINFO_DATA, protocols.HEADER_FLAG_DATA_TYPE_PB, body)
 
 	}
-	client.Conn("192.168.3.26:9091")
+	client.Conn("192.168.3.190:9091")
 
 	sw := sync.WaitGroup{}
 	sw.Add(1)
