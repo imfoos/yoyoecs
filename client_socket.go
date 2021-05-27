@@ -2,7 +2,7 @@
  * @Author: F1
  * @Date: 2020-07-14 21:16:18
  * @LastEditors: F1
- * @LastEditTime: 2020-08-19 18:55:51
+ * @LastEditTime: 2020-11-11 14:26:44
  * @Description:
  *
  *				yoyoecs　主要应用场景是边缘端与云端通讯时，采用socket来同步数据，该项目主要为底层协议及通讯实现。应最大限度的避开业务逻辑。
@@ -22,9 +22,7 @@ package yoyoecs
 
 import (
 	"fmt"
-	"golang.org/x/net/proxy"
 	"net"
-	"os"
 	"sync"
 	"time"
 
@@ -45,6 +43,7 @@ import (
 type ClientSocket struct {
 	isReConnect   bool
 	ConnectId     string
+	RemoteAddr    string
 	IsConnected   bool
 	ipAddress     string
 	conn          *net.Conn
@@ -63,7 +62,6 @@ type ClientSocket struct {
 	OnlineTime   time.Time
 	ReConnLock   sync.Mutex
 	sendLock     sync.Mutex
-	Proxy        string
 }
 
 /**
@@ -114,15 +112,9 @@ func (cs *ClientSocket) Conn(ipAddress string) (err error) {
 	cs.IsConnected = false
 	cs.isReConnect = true
 	for {
-
 		cs.ipAddress = ipAddress
-		conn, err := cs.getConn()
-		if err != nil {
-			fmt.Printf("getConn error: %v", err)
-			return
-		}
-		//cn, err := net.Dial("tcp", ipAddress)
-		cs.conn = &conn
+		cn, err := net.Dial("tcp", ipAddress)
+		cs.conn = &cn
 		if err != nil {
 			if cs.OnConnError != nil {
 				cs.OnConnError(err)
@@ -142,24 +134,6 @@ func (cs *ClientSocket) Conn(ipAddress string) (err error) {
 
 	go cs.read()
 
-	return
-}
-
-func (cs *ClientSocket) getConn() (conn net.Conn, err error) {
-	if cs.Proxy != "" {
-		dialer, err := proxy.SOCKS5("tcp", cs.Proxy, nil, proxy.Direct)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "remote connection error:", err)
-			return
-		}
-		conn, err = dialer.Dial("tcp", cs.ipAddress)
-	} else {
-		conn, err = net.Dial("tcp", cs.ipAddress)
-	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "remote connection error:", err)
-		return
-	}
 	return
 }
 
@@ -185,13 +159,8 @@ func (cs *ClientSocket) checkConn() (err error) {
 	cs.Buffer = cs.Buffer[len(cs.Buffer):]
 	for {
 		cs.conn = nil
-		conn, err := cs.getConn()
-		if err != nil {
-			fmt.Printf("getConn error: %v", err)
-			return
-		}
-
-		cs.conn = &conn
+		cn, err := net.Dial("tcp", cs.ipAddress)
+		cs.conn = &cn
 		if err != nil {
 			if cs.OnConnError != nil {
 				cs.OnConnError(err)
@@ -258,6 +227,23 @@ func (cs *ClientSocket) connerror(err error) {
 }
 
 /**
+ * @Title: RemoteIpAddress
+ * @Description:
+ *
+ *				RemoteIpAddress 远端IP
+ *
+ * @Author: F1
+ * @Date: 2020-07-21 11:29:23
+ * @Param:err error
+ */
+func (cs *ClientSocket) RemoteIpAddress() string {
+	if cs.conn != nil && cs.IsConnected {
+		return (*cs.conn).RemoteAddr().String()
+	}
+	return "Unknow"
+}
+
+/**
  * @Title: read
  * @Description:
  *
@@ -320,7 +306,7 @@ func (cs *ClientSocket) read() {
 					}
 					continue
 				} else if header.Cmd == protocols.RESPONSE_HEARTBEAT {
-					fmt.Println("收到心跳回复。")
+					//fmt.Println("收到心跳回复。")
 					continue
 				} else {
 					total := len(cs.Buffer)
@@ -345,9 +331,9 @@ func (cs *ClientSocket) read() {
 						if cs.OnRecvMessage != nil {
 							if header.Flag&protocols.HEADER_FLAG_IS_COMPRESS > 0 {
 
-								fmt.Println("收到消息：开启了压缩,解压前", len(data))
+								//fmt.Println("收到消息：开启了压缩,解压前", len(data))
 								data = utils.UnCompress(data)
-								fmt.Println("收到消息：开启了压缩,解压后", len(data))
+								//fmt.Println("收到消息：开启了压缩,解压后", len(data))
 								header.Length = uint16(len(data))
 							}
 							cs.OnRecvMessage(header, data, cs)
@@ -388,25 +374,32 @@ func (cs *ClientSocket) SendMessage(cmd protocols.Command, flag protocols.Flag, 
 	header.Cmd = cmd
 	header.Flag = flag
 
+	var cdata []byte
 	if (protocols.HEADER_FLAG_IS_COMPRESS&flag) > 0 && len(body) > 0 {
 		fmt.Println("发送消息：开启了压缩,压缩前", len(body))
-		body = utils.Compress(body)
-		fmt.Println("发送消息：开启了压缩,压缩后", len(body))
+		cdata = utils.Compress(body)
+		fmt.Println("发送消息：开启了压缩,压缩后", len(cdata))
 	}
 
-	if len(body) > 2<<15 {
-		panic(fmt.Sprintf("超出可接收长度。len(body):%d > %d", len(body), 2<<15))
+	if len(cdata) > 2<<15 {
+		//panic(fmt.Sprintf("超出可接收长度。len(body):%d > %d", len(body), 2<<15))
+		fmt.Println(fmt.Sprintf("压缩之后还是超出了可接收长度。len(body):%d > %d，压缩后：%d", len(body), 2<<15, len(cdata)))
+
+		header.Flag = ^protocols.HEADER_FLAG_IS_COMPRESS
+		cdata = body[0 : 2<<15]
+
+		fmt.Println(fmt.Sprintf("按最长的截掉。len(body):%d => %d", len(body), len(cdata)))
 	}
 
 	var data []byte
-	if body != nil {
-		header.Length = uint16(len(body))
+	if cdata != nil {
+		header.Length = uint16(len(cdata))
 		data = header.ToBytes()
-		data = append(data, body...)
-		fmt.Println("SendMessage cmd", cmd, "length", header.Length, len(data))
+		data = append(data, cdata...)
+		//fmt.Println("SendMessage cmd", cmd, "length", header.Length, len(data))
 	} else {
 		data = header.ToBytes()
-		fmt.Println("SendMessage cmd", cmd, "length nil", header.Length, len(data))
+		//fmt.Println("SendMessage cmd", cmd, "length nil", header.Length, len(data))
 	}
 
 	err = cs.SendData(data)
@@ -435,10 +428,10 @@ func (cs *ClientSocket) SendData(body []byte) (err error) {
 		cs.connerror(err)
 		return
 	}
-	fmt.Println("SendData", "准备发送，获取待锁。")
+	//fmt.Println("SendData", "准备发送，获取待锁。")
 	cs.sendLock.Lock()
 	defer cs.sendLock.Unlock()
-	fmt.Println("SendData", "准备发送，获取待锁成功。")
+	//fmt.Println("SendData", "准备发送，获取待锁成功。")
 	total := len(body)
 	index := 0
 
@@ -463,6 +456,6 @@ func (cs *ClientSocket) SendData(body []byte) (err error) {
 		index += send
 	}
 
-	fmt.Println("SendData", "成功发送：", total)
+	//fmt.Println("SendData", "成功发送：", total)
 	return nil
 }
