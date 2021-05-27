@@ -119,7 +119,7 @@ func (cs *ClientSocket) Conn(ipAddress string) (err error) {
 		cn, err := cs.getConn()
 		if err != nil {
 			fmt.Printf("getConn error: %v", err)
-			return
+			return err
 		}
 		cs.conn = &cn
 		if err != nil {
@@ -169,7 +169,7 @@ func (cs *ClientSocket) checkConn() (err error) {
 		cn, err := cs.getConn()
 		if err != nil {
 			fmt.Printf("checkConn error: %v", err)
-			return
+			return err
 		}
 		cs.conn = &cn
 		if err != nil {
@@ -189,10 +189,10 @@ func (cs *ClientSocket) checkConn() (err error) {
 
 func (cs *ClientSocket) getConn() (conn net.Conn, err error) {
 	if cs.Proxy != "" {
-		dialer, err := proxy.SOCKS5("tcp", cs.Proxy, nil, proxy.Direct)
-		if err != nil {
+		dialer, derr := proxy.SOCKS5("tcp", cs.Proxy, nil, proxy.Direct)
+		if derr != nil {
 			fmt.Fprintln(os.Stderr, "remote connection error:", err)
-			return
+			return nil, derr
 		}
 		conn, err = dialer.Dial("tcp", cs.ipAddress)
 	} else {
