@@ -1,4 +1,4 @@
-module github.com/fengyily/yoyoecs
+module github.com/imfoos/yoyoecs
 
 go 1.13
 
