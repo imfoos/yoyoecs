@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"golang.org/x/net/proxy"
 	"net"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -189,7 +190,14 @@ func (cs *ClientSocket) checkConn() (err error) {
 
 func (cs *ClientSocket) getConn() (conn net.Conn, err error) {
 	if cs.Proxy != "" {
-		dialer, derr := proxy.SOCKS5("tcp", cs.Proxy, nil, proxy.Direct)
+		url, _ := url.Parse(cs.Proxy)
+		var auth *proxy.Auth
+		if url.User != nil {
+			auth := &proxy.Auth{}
+			auth.User = url.User.Username()
+			auth.Password, _ = url.User.Password()
+		}
+		dialer, derr := proxy.SOCKS5("tcp", url.Host, auth, proxy.Direct)
 		if derr != nil {
 			fmt.Fprintln(os.Stderr, "remote connection error:", err)
 			return nil, derr
